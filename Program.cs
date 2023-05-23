@@ -1,21 +1,16 @@
 ﻿using System.Diagnostics;
 
-namespace Sdownstall;
+namespace Sadd;
 
 static class Program
 {
-    static void Main(string[] args)
-    {
-        Task<int> task = Task.Run(() => RouteArguments(args));
-        task.Wait();
-        Environment.Exit(task.Result);
-    }
+    static void Main(string[] args) => Environment.Exit(RouteArguments(args));
 
-    static async Task<int> RouteArguments(string[] args)
+    static int RouteArguments(string[] args)
     {
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("No arguments provided.");
+            Console.WriteLine("No arguments provided.");
             return 1;
         }
 
@@ -29,13 +24,13 @@ static class Program
         //Check for root privileges
         if (Environment.OSVersion.Platform != PlatformID.Unix)
         {
-            Console.Error.WriteLine("This program can only be run on Linux.");
+            Console.WriteLine("This program can only be run on Linux.");
             return 1;
         }
 
         if (Environment.GetEnvironmentVariable("USER") != "root")
         {
-            Console.Error.WriteLine("This program requires root privileges.");
+            Console.WriteLine("This program requires root privileges.");
             return 1;
         }
 
@@ -43,12 +38,15 @@ static class Program
         string? url = GetArgumentValue(args, "--url") ?? GetArgumentValue(args, "-u");
         if (url == null)
         {
-            Console.Error.WriteLine("No URL provided.");
+			if (args.Length == 2)
+				return DownloadAndInstall(args[0], args[1]);
+
+			Console.WriteLine("No URL provided.");
             return 1;
         }
 
         string output = (GetArgumentValue(args, "--output") ?? GetArgumentValue(args, "-o")) ?? Environment.CurrentDirectory;
-        return await DownloadAndInstall(url, output);
+        return DownloadAndInstall(url, output);
     }
 
     static string? GetArgumentValue(string[] args, string argumentName)
@@ -59,7 +57,7 @@ static class Program
 
         if (index == args.Length - 1) //Argument is the last one
         {
-            Console.Error.WriteLine($"No value provided for argument '{argumentName}'.");
+            Console.WriteLine($"No value provided for argument '{argumentName}'.");
             return null;
         }
 
@@ -69,19 +67,20 @@ static class Program
     static void PrintHelp()
     {
         Console.WriteLine("Sadd. Downloads a .deb file from a given URL and installs it using 'dpkg'. Requires root privileges.");
-        Console.WriteLine("Usage: sdowntall [options]");
+        Console.WriteLine("Usage: sadd [options]");
+        Console.WriteLine("sadd [url] [output]");
         Console.WriteLine("Options:");
         Console.WriteLine("  -u, --url <url>      URL to download the .deb file from. Required.");
         Console.WriteLine("  -o, --output <file>  Downloaded file path. If not provided, the file will be downloaded to the current directory.");
         Console.WriteLine("  -h, --help           Show help. Can only be used by itself without any other arguments.");
+		
     }
 
-    static async Task<int> DownloadAndInstall(string url, string output)
+    static int DownloadAndInstall(string url, string output)
     {
         try
         {
-            Console.WriteLine($"Downloading from: {url}...");
-            int downloadResult = await Download(url, output);
+            int downloadResult = Download(url, output).GetAwaiter().GetResult();
             if (downloadResult != 0)
                 return downloadResult;
 
@@ -95,7 +94,7 @@ static class Program
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine(ex.Message);
+            Console.WriteLine(ex.Message);
             return 1;
         }
     }
@@ -104,8 +103,14 @@ static class Program
     {
         try
         {
+			if (Directory.Exists(output))
+				output += $"{DateTimeOffset.UtcNow.UtcTicks}.deb";
+
+
+			Console.WriteLine($"Downloading from: {url}...");
             using HttpClient client = new();
             using HttpResponseMessage response = await client.GetAsync(url);
+
             response.EnsureSuccessStatusCode();
 
             using Stream contentStream = await response.Content.ReadAsStreamAsync();
@@ -116,7 +121,7 @@ static class Program
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Failed to download file from {url}. {ex.Message}");
+            Console.WriteLine($"Failed to download file from {url}. {ex.Message}");
             return 1;
         }
     }
@@ -127,7 +132,7 @@ static class Program
         {
             Process process = new();
             process.StartInfo.FileName = "dpkg";
-            process.StartInfo.Arguments = $"-i {path} -v";
+            process.StartInfo.Arguments = $"-i \"{path}\"";
             process.Start();
             process.WaitForExit();
 
@@ -136,11 +141,8 @@ static class Program
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine(ex.Message);
+            Console.WriteLine(ex.Message);
             return 1;
         }
     }
 }
-
-//JZP 954
-//Voice
